@@ -5,50 +5,50 @@ services:
     image: mysql:8.0
     container_name: callmaker-mysql
     environment:
-      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_ROOT_PASSWORD: rootpassword
       MYSQL_DATABASE: callmaker_db
       MYSQL_USER: callmaker_user
       MYSQL_PASSWORD: callmaker_pass
     ports:
       - "3307:3306"
     volumes:
-      - callmaker_mysql_data:/var/lib/mysql
+      - mysql_data:/var/lib/mysql
+      - ./callmaker_db.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - callmaker-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "callmaker_user", "-pcallmaker_pass"]
-      timeout: 20s
-      retries: 10
-      start_period: 30s
-    restart: unless-stopped
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  backend:
+  app:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
-    container_name: callmaker-backend
+    container_name: callmaker-app
+    environment:
+      NODE_ENV: production
+      DB_HOST: mysql
+      DB_USER: callmaker_user
+      DB_PASSWORD: callmaker_pass
+      DB_NAME: callmaker_db
+      DB_PORT: 3306
+      JWT_SECRET: your-super-secret-jwt-key-change-this
+      PORT: 5000
     ports:
       - "5000:5000"
-    environment:
-      - DB_HOST=callmaker-mysql
-      - DB_USER=callmaker_user
-      - DB_PASSWORD=callmaker_pass
-      - DB_NAME=callmaker_db
-      - JWT_SECRET=jenkins-docker-secret-2024
-      - NODE_ENV=production
     depends_on:
       mysql:
         condition: service_healthy
-    restart: unless-stopped
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: callmaker-frontend
-    ports:
-      - "80:80"
-    depends_on:
-      - backend
+    networks:
+      - callmaker-network
     restart: unless-stopped
 
 volumes:
-  callmaker_mysql_data:
+  mysql_data:
+    driver: local
+
+networks:
+  callmaker-network:
+    driver: bridge
