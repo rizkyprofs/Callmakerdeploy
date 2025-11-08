@@ -14,7 +14,7 @@
 ### 🔐 Sistem Autentikasi
 - Login & Register dengan **JWT Token**
 - **Role-based Access Control** (Admin / CallMaker / User)
-- **Protected Routes** dengan validasi token otomatis
+- **Protected Routes** dengan validasi token otomatiss
 
 ### 👥 Multi-Role System
 #### 👑 Administrator
