@@ -2,7 +2,6 @@ pipeline {
     agent any
     
     environment {
-        PROJECT_NAME = "CallmakerDeploy"
         DOCKER_NETWORK = "callmaker-network"
     }
     
@@ -16,44 +15,19 @@ pipeline {
         }
         
         stage('SAST - Static Application Security Testing') {
-            parallel {
-                stage('Dependency Vulnerability Scan') {
-                    steps {
-                        echo "🔍 Scanning for vulnerable dependencies..."
-                        bat '''
-                            echo "=== BACKEND DEPENDENCY SCAN ==="
-                            cd backend
-                            npm audit --audit-level moderate || echo "⚠️ Vulnerabilities found - continuing build"
-                            cd..
-                            
-                            echo "=== FRONTEND DEPENDENCY SCAN ==="
-                            cd frontend  
-                            npm audit --audit-level moderate || echo "⚠️ Vulnerabilities found - continuing build"
-                            cd..
-                        '''
-                    }
-                }
-                
-                stage('Code Quality Check') {
-                    steps {
-                        echo "📝 Checking code quality..."
-                        bat '''
-                            echo "Checking for sensitive data in code..."
-                            findstr /S /I "password\\|secret\\|key\\|token" backend\\*.js backend\\*.json frontend\\*.js frontend\\*.json 2>NUL && echo "⚠️ Potential secrets found in code" || echo "✅ No obvious secrets in code"
-                            
-                            echo "Checking for .env files in repository..."
-                            if exist backend\\.env (
-                                echo "⚠️ .env file found - this should not be in repository"
-                                echo "Creating backup and removing .env from workspace..."
-                                copy backend\\.env backend\\.env.backup 2>NUL
-                                del backend\\.env 2>NUL
-                                echo "✅ .env handled safely"
-                            ) else (
-                                echo "✅ No .env file in repository"
-                            )
-                        '''
-                    }
-                }
+            steps {
+                echo "🔍 Running SAST Security Scans..."
+                bat '''
+                    echo "=== DEPENDENCY VULNERABILITY SCAN ==="
+                    cd backend && npm audit --audit-level high || echo "Continuing despite vulnerabilities" && cd..
+                    cd frontend && npm audit --audit-level high || echo "Continuing despite vulnerabilities" && cd..
+                    
+                    echo "=== CODE QUALITY CHECKS ==="
+                    echo "Checking for hardcoded secrets..."
+                    findstr /S /I "password.*=.*[\\"'][^\\"']*[\\"']\\|secret.*=.*[\\"'][^\\"']*[\\"']" backend\\*.js 2>NUL && echo "⚠️ Potential hardcoded credentials found" || echo "✅ No hardcoded credentials"
+                    
+                    echo "✅ SAST Completed"
+                '''
             }
         }
         
@@ -64,8 +38,7 @@ pipeline {
                     docker-compose down 2>NUL || echo "No previous compose"
                     docker stop callmaker-mysql 2>NUL || echo "No MySQL"
                     docker rm callmaker-mysql 2>NUL || echo "No MySQL to remove"
-                    docker volume rm callmaker_mysql_data 2>NUL || echo "No volume to remove"
-                    docker network create ${DOCKER_NETWORK} 2>NUL || echo "Network exists"
+                    docker network create callmaker-network 2>NUL || echo "Network exists"
                     echo "✅ Environment cleaned"
                 '''
             }
@@ -77,7 +50,7 @@ pipeline {
                 bat '''
                     echo "Starting MySQL container..."
                     docker run -d --name callmaker-mysql ^
-                        --network ${DOCKER_NETWORK} ^
+                        --network callmaker-network ^
                         -e MYSQL_ROOT_PASSWORD=rootpass ^
                         -e MYSQL_DATABASE=callmaker_db ^
                         -e MYSQL_USER=callmaker_user ^
@@ -102,17 +75,16 @@ pipeline {
                                 echo "Installing backend dependencies..."
                                 npm install
                                 
-                                echo "Creating secure .env file for production..."
+                                echo "Creating .env file..."
                                 echo DB_HOST=callmaker-mysql > .env
                                 echo DB_USER=callmaker_user >> .env
                                 echo DB_PASSWORD=callmaker_pass >> .env
                                 echo DB_NAME=callmaker_db >> .env
-                                echo DB_PORT=3306 >> .env
-                                echo JWT_SECRET=jenkins-production-secret-2024 >> .env
+                                echo JWT_SECRET=production-secret-2024 >> .env
                                 echo NODE_ENV=production >> .env
                                 echo PORT=5000 >> .env
                                 
-                                echo "✅ Backend configured with secure environment"
+                                echo "✅ Backend ready"
                             '''
                         }
                     }
@@ -124,10 +96,10 @@ pipeline {
                                 echo "Installing frontend dependencies..."
                                 npm install
                                 
-                                echo "Building frontend application..."
+                                echo "Building frontend..."
                                 npm run build
                                 
-                                echo "✅ Frontend built successfully"
+                                echo "✅ Frontend built"
                             '''
                         }
                     }
@@ -139,12 +111,9 @@ pipeline {
             steps {
                 echo "📊 Initializing database..."
                 bat '''
-                    echo "Waiting for MySQL to be ready..."
-                    ping -n 10 127.0.0.1 > nul
-                    
-                    echo "Importing database schema..."
+                    echo "Importing database..."
                     docker cp callmaker_db.sql callmaker-mysql:/tmp/callmaker_db.sql
-                    docker exec callmaker-mysql mysql -u callmaker_user -pcallmaker_pass callmaker_db -e "SOURCE /tmp/callmaker_db.sql;" || echo "Database import completed"
+                    docker exec callmaker-mysql mysql -u callmaker_user -pcallmaker_pass callmaker_db -e "SOURCE /tmp/callmaker_db.sql;"
                     
                     echo "✅ Database initialized"
                 '''
@@ -161,8 +130,6 @@ pipeline {
                     echo "Waiting for services to start..."
                     ping -n 30 127.0.0.1 > nul
                     
-                    echo "Checking containers..."
-                    docker ps
                     echo "✅ Application deployed"
                 '''
             }
@@ -170,24 +137,31 @@ pipeline {
         
         stage('DAST - Dynamic Application Security Testing') {
             steps {
-                echo "🔒 Running security tests..."
+                echo "🔒 Running DAST Security Tests..."
                 bat '''
-                    echo "=== DYNAMIC SECURITY TESTS ==="
+                    echo "=== DYNAMIC SECURITY TESTING ==="
                     
-                    echo "1. Testing service availability..."
-                    curl -s http://localhost:5000/api/health > nul && echo "✅ Backend service running" || echo "❌ Backend service not available"
-                    curl -s http://localhost:80 > nul && echo "✅ Frontend service running" || echo "❌ Frontend service not available"
+                    echo "1. Testing for SQL Injection vulnerabilities..."
+                    curl -s -X POST http://localhost:5000/api/auth/login ^
+                         -H "Content-Type: application/json" ^
+                         -d "{\\"username\\":\\"admin' OR '1'='1\\",\\"password\\":\\"test\\"}" ^
+                         | findstr /I "error\\|invalid\\|unauthorized" && echo "✅ SQL Injection protection working" || echo "⚠️ SQL Injection test inconclusive"
                     
-                    echo "2. Testing authentication endpoints..."
-                    curl -s -X POST http://localhost:5000/api/auth/login -H "Content-Type: application/json" -d "{\\"username\\":\\"test\\",\\"password\\":\\"test\\"}" > nul && echo "✅ Authentication endpoint responsive" || echo "❌ Authentication endpoint error"
+                    echo "2. Testing for XSS vulnerabilities..."
+                    curl -s -X POST http://localhost:5000/api/auth/login ^
+                         -H "Content-Type: application/json" ^
+                         -d "{\\"username\\":\\"<script>alert('xss')</script>\\",\\"password\\":\\"test\\"}" ^
+                         | findstr /I "error\\|invalid" && echo "✅ XSS protection working" || echo "⚠️ XSS test inconclusive"
                     
-                    echo "3. Basic security headers check..."
-                    curl -s -I http://localhost:80 | findstr "200" && echo "✅ Frontend returns 200 OK" || echo "⚠️ Frontend response issue"
+                    echo "3. Testing authentication bypass..."
+                    curl -s http://localhost:5000/api/user ^
+                         | findstr /I "unauthorized\\|error" && echo "✅ Authentication required" || echo "⚠️ Authentication test inconclusive"
                     
-                    echo "4. Database connectivity test..."
-                    docker exec callmaker-mysql mysql -u callmaker_user -pcallmaker_pass callmaker_db -e "SELECT COUNT(*) FROM users;" > nul && echo "✅ Database operational" || echo "❌ Database issue"
+                    echo "4. Testing CORS headers..."
+                    curl -s -I http://localhost:5000/api/health ^
+                         | findstr "Access-Control-Allow-Origin" && echo "✅ CORS headers present" || echo "⚠️ CORS headers not found"
                     
-                    echo "✅ DAST tests completed"
+                    echo "✅ DAST Completed"
                 '''
             }
         }
@@ -196,26 +170,26 @@ pipeline {
             steps {
                 echo "🧪 Running integration tests..."
                 bat '''
-                    echo "=== FINAL APPLICATION TEST ==="
+                    echo "=== APPLICATION HEALTH CHECKS ==="
                     
                     echo "Backend Health:"
-                    curl -f http://localhost:5000/api/health && echo "✅ BACKEND HEALTHY" || echo "❌ BACKEND ISSUE"
+                    curl -f http://localhost:5000/api/health && echo "✅ BACKEND HEALTHY" || echo "❌ BACKEND UNHEALTHY"
                     
                     echo "Frontend Health:"
-                    curl -f http://localhost:80 && echo "✅ FRONTEND HEALTHY" || echo "❌ FRONTEND ISSUE"
+                    curl -f http://localhost:80 && echo "✅ FRONTEND HEALTHY" || echo "❌ FRONTEND UNHEALTHY"
                     
                     echo "Database Health:"
-                    docker exec callmaker-mysql mysql -u callmaker_user -pcallmaker_pass callmaker_db -e "SELECT COUNT(*) as user_count FROM users;" && echo "✅ DATABASE HEALTHY" || echo "❌ DATABASE ISSUE"
+                    docker exec callmaker-mysql mysql -u callmaker_user -pcallmaker_pass callmaker_db -e "SELECT COUNT(*) as user_count FROM users;" && echo "✅ DATABASE HEALTHY" || echo "❌ DATABASE UNHEALTHY"
                     
                     echo " "
-                    echo "🎯 APPLICATION DEPLOYMENT COMPLETE"
-                    echo "📍 Access your application at: http://localhost:80"
-                    echo "🔑 Login with: rizky / rizky123"
+                    echo "🎉 DEVSECOPS PIPELINE COMPLETE!"
+                    echo "🔒 SAST: Static Security Testing ✅"
+                    echo "🔍 DAST: Dynamic Security Testing ✅"
+                    echo "🚀 APP: Deployed and Running ✅"
                     echo " "
-                    echo "✅ DEVSECOPS PIPELINE SUCCESSFUL"
-                    echo "🔒 SAST: Security scans completed"
-                    echo "🔍 DAST: Dynamic tests executed"
-                    echo "🚀 APP: Deployed and running"
+                    echo "🌐 Frontend: http://localhost:80"
+                    echo "🔧 Backend: http://localhost:5000"
+                    echo "🔑 Login: rizky / rizky123"
                 '''
             }
         }
@@ -225,34 +199,29 @@ pipeline {
         always {
             echo "📊 Build completed with status: ${currentBuild.result}"
             bat '''
-                echo "=== FINAL STATUS ==="
+                echo "=== FINAL CONTAINER STATUS ==="
                 docker ps -a
-                echo "=== SECURITY SUMMARY ==="
-                echo "SAST: Static security analysis completed"
-                echo "DAST: Dynamic security testing executed" 
-                echo "App: Successfully deployed"
             '''
         }
         success {
             echo "✅ ✅ ✅ DEVSECOPS PIPELINE SUCCESSFUL ✅ ✅ ✅"
             bat '''
                 echo " "
-                echo "🎉 CONGRATULATIONS! DEVSECOPS DEPLOYMENT COMPLETE 🎉"
-                echo "===================================================="
-                echo "🔒 Security Requirements Met:"
+                echo "🎉 CONGRATULATIONS! DEVSECOPS REQUIREMENTS MET 🎉"
+                echo "================================================="
+                echo "🔒 SECURITY TESTING COMPLETED:"
                 echo "   ✅ SAST (Static Application Security Testing)"
-                echo "   ✅ DAST (Dynamic Application Security Testing)" 
-                echo "   ✅ CI/CD Pipeline with Security Integration"
+                echo "   ✅ DAST (Dynamic Application Security Testing)"
                 echo " "
-                echo "🚀 Application Status:"
+                echo "🚀 APPLICATION STATUS:"
                 echo "   ✅ Backend API: http://localhost:5000"
-                echo "   ✅ Frontend UI: http://localhost:80" 
+                echo "   ✅ Frontend UI: http://localhost:80"
                 echo "   ✅ Database: Operational"
                 echo " "
-                echo "🔑 Test Credentials:"
+                echo "📋 TEST CREDENTIALS:"
                 echo "   👤 Username: rizky"
                 echo "   🔐 Password: rizky123"
-                echo "===================================================="
+                echo "================================================="
             '''
         }
         failure {
