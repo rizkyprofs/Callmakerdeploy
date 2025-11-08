@@ -10,7 +10,7 @@ pipeline {
         stage('Checkout Code') {
             steps {
                 echo "🚀 Checking out code from GitHub..."
-                git branch: 'main', 
+                git branch: 'master', 
                     url: 'https://github.com/rizkyprofs/Callmakerdeploy.git'
                 
                 bat 'echo "Current directory:" && cd'
