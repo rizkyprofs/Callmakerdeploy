@@ -81,9 +81,30 @@ pipeline {
                         -p 3307:3306 ^
                         mysql:8.0
                     
-                    echo "Waiting for MySQL to start..."
-                    timeout /t 30 /nobreak
-                    echo "✅ MySQL Database ready"
+                    echo "Waiting for MySQL to start (30 seconds)..."
+                    ping -n 31 127.0.0.1 > nul
+                    echo "✅ MySQL Database container started"
+                '''
+            }
+        }
+        
+        stage('Wait for MySQL Ready') {
+            steps {
+                echo "⏳ Waiting for MySQL to be ready..."
+                bat '''
+                    echo "Checking if MySQL is ready..."
+                    for /L %%i in (1,1,30) do (
+                        docker exec callmaker-mysql mysqladmin ping -h localhost -u root -prootpass --silent
+                        if not errorlevel 1 (
+                            echo "✅ MySQL is ready and responsive!"
+                            goto mysql_ready
+                        )
+                        echo "Waiting for MySQL... (attempt %%i/30)"
+                        ping -n 2 127.0.0.1 > nul
+                    )
+                    echo "❌ MySQL failed to start within timeout"
+                    exit 1
+                    :mysql_ready
                 '''
             }
         }
@@ -95,7 +116,6 @@ pipeline {
                     echo "Checking for database file..."
                     if exist callmaker_db.sql (
                         echo "Database file found, importing schema..."
-                        timeout /t 10 /nobreak
                         
                         echo "Copying SQL file to container..."
                         docker cp callmaker_db.sql callmaker-mysql:/tmp/
@@ -159,7 +179,7 @@ pipeline {
                         callmaker-backend
                     
                     echo "Waiting for backend to start..."
-                    timeout /t 20 /nobreak
+                    ping -n 10 127.0.0.1 > nul
                     
                     echo "Checking backend health..."
                     curl -f http://localhost:5000/api/health && echo "✅ Backend is healthy" || echo "⚠️ Backend health check failed"
@@ -254,8 +274,8 @@ pipeline {
                 echo "MySQL logs:"
                 docker logs callmaker-mysql --tail 15 2>NUL || echo "No MySQL logs"
                 echo.
-                echo "Recent container events:"
-                docker events --since 5m 2>NUL || echo "No recent events"
+                echo "Container status:"
+                docker ps -a
             '''
         }
     }
