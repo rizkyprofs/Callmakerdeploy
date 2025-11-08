@@ -10,11 +10,20 @@ pipeline {
         stage('Checkout Code') {
             steps {
                 echo "🚀 Checking out code from GitHub..."
-                git branch: 'master', 
+                git branch: 'master',
                     url: 'https://github.com/rizkyprofs/Callmakerdeploy.git'
                 
-                bat 'echo "Current directory:" && cd'
-                bat 'dir'
+                bat '''
+                    echo "Current directory:"
+                    cd
+                    echo "Files in workspace:"
+                    dir
+                    echo "Checking project structure:"
+                    if exist backend (echo "✅ Backend exists" && cd backend && dir && cd..) else (echo "❌ Backend missing")
+                    if exist frontend (echo "✅ Frontend exists" && cd frontend && dir && cd..) else (echo "❌ Frontend missing")
+                    if exist callmaker_db.sql (echo "✅ SQL file exists") else (echo "❌ SQL file missing")
+                    if exist Jenkinsfile (echo "✅ Jenkinsfile exists") else (echo "❌ Jenkinsfile missing")
+                '''
             }
         }
         
@@ -47,7 +56,9 @@ pipeline {
                         mysql:8.0
                     
                     echo "Waiting for MySQL to initialize..."
-                    timeout /t 40 /nobreak
+                    ping -n 40 127.0.0.1 > nul
+                    echo "Checking MySQL status..."
+                    docker logs callmaker-mysql --tail 10
                 '''
             }
         }
@@ -105,7 +116,10 @@ pipeline {
                 echo "📊 Initializing Database from SQL Export..."
                 bat '''
                     echo "Waiting for MySQL to be ready..."
-                    timeout /t 30 /nobreak
+                    ping -n 30 127.0.0.1 > nul
+                    
+                    echo "Checking if MySQL is ready..."
+                    docker exec callmaker-mysql mysql -u callmaker_user -pcallmaker_pass callmaker_db -e "SELECT 1;" && echo "✅ MySQL ready" || echo "❌ MySQL not ready yet"
                     
                     echo "Checking if SQL file exists..."
                     if exist callmaker_db.sql (
@@ -152,7 +166,7 @@ pipeline {
                             INSERT IGNORE INTO users (username, password, fullname, role) VALUES 
                             ('rizky', 'rizky123', 'Rizky Profs', 'admin'),
                             ('admin', 'admin123', 'Administrator', 'admin');
-                        "
+                        " && echo "✅ Basic structure created"
                     )
                     
                     echo "🎉 Database initialization completed!"
@@ -314,7 +328,10 @@ pipeline {
                     docker-compose up --build -d
                     
                     echo "Waiting for services to start..."
-                    timeout /t 45 /nobreak
+                    ping -n 45 127.0.0.1 > nul
+                    
+                    echo "Checking containers status..."
+                    docker ps
                 '''
             }
         }
