@@ -135,36 +135,36 @@ pipeline {
             }
         }
         
-        stage('DAST - Dynamic Application Security Testing') {
-            steps {
-                echo "🔒 Running DAST Security Tests..."
-                bat '''
-                    echo "=== DYNAMIC SECURITY TESTING ==="
-                    
-                    echo "1. Testing for SQL Injection vulnerabilities..."
-                    curl -s -X POST http://localhost:5000/api/auth/login ^
-                         -H "Content-Type: application/json" ^
-                         -d "{\\"username\\":\\"admin' OR '1'='1\\",\\"password\\":\\"test\\"}" ^
-                         | findstr /I "error\\|invalid\\|unauthorized" && echo "✅ SQL Injection protection working" || echo "⚠️ SQL Injection test inconclusive"
-                    
-                    echo "2. Testing for XSS vulnerabilities..."
-                    curl -s -X POST http://localhost:5000/api/auth/login ^
-                         -H "Content-Type: application/json" ^
-                         -d "{\\"username\\":\\"<script>alert('xss')</script>\\",\\"password\\":\\"test\\"}" ^
-                         | findstr /I "error\\|invalid" && echo "✅ XSS protection working" || echo "⚠️ XSS test inconclusive"
-                    
-                    echo "3. Testing authentication bypass..."
-                    curl -s http://localhost:5000/api/user ^
-                         | findstr /I "unauthorized\\|error" && echo "✅ Authentication required" || echo "⚠️ Authentication test inconclusive"
-                    
-                    echo "4. Testing CORS headers..."
-                    curl -s -I http://localhost:5000/api/health ^
-                         | findstr "Access-Control-Allow-Origin" && echo "✅ CORS headers present" || echo "⚠️ CORS headers not found"
-                    
-                    echo "✅ DAST Completed"
-                '''
-            }
+    stage('DAST - Dynamic Application Security Testing') {
+        steps {
+            echo "🔒 Running DAST Security Tests..."
+            bat '''
+                echo "=== DYNAMIC SECURITY TESTING ==="
+            
+                echo "1. Testing for SQL Injection vulnerabilities..."
+                curl -s -X POST http://localhost:5000/api/auth/login ^
+                     -H "Content-Type: application/json" ^
+                     -d "{\\"username\\":\\"admin' OR '1'='1\\",\\"password\\":\\"test\\"}" ^
+                     | findstr /I "error\\|invalid\\|unauthorized" && echo "✅ SQL Injection protection working" || echo "⚠️ SQL Injection test inconclusive"
+            
+                echo "2. Testing for XSS vulnerabilities..."
+                curl -s -X POST http://localhost:5000/api/auth/login ^
+                     -H "Content-Type: application/json" ^
+                     -d "{\\"username\\":\\"<script>alert('xss')</script>\\",\\"password\\":\\"test\\"}" ^
+                     | findstr /I "error\\|invalid" && echo "✅ XSS protection working" || echo "⚠️ XSS test inconclusive"
+            
+                echo "3. Testing authentication bypass..."
+                curl -s http://localhost:5000/api/user ^
+                     | findstr /I "unauthorized\\|error" && echo "✅ Authentication required" || echo "⚠️ Authentication test inconclusive"
+            
+                echo "4. Testing CORS headers..."
+                curl -s -I http://localhost:5000/api/health ^
+                     | findstr "Access-Control-Allow-Origin" && echo "✅ CORS headers present" || echo "⚠️ CORS headers not found"
+            
+                echo "✅ DAST Completed"
+            '''
         }
+    }
         
         stage('Integration Test') {
             steps {
