@@ -44,8 +44,10 @@ pipeline {
                             echo "Checking for .env files in repository..."
                             if exist backend\\.env (
                                 echo "⚠️ .env file found - this should not be in repository"
-                                echo "Removing .env from workspace (will recreate during build)..."
-                                del backend\\.env
+                                echo "Creating backup and removing .env from workspace..."
+                                copy backend\\.env backend\\.env.backup 2>NUL
+                                del backend\\.env 2>NUL
+                                echo "✅ .env handled safely"
                             ) else (
                                 echo "✅ No .env file in repository"
                             )
