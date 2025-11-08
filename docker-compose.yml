@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: callmaker-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: callmaker_db
+      MYSQL_USER: callmaker_user
+      MYSQL_PASSWORD: callmaker_pass
+    ports:
+      - "3307:3306"
+    volumes:
+      - callmaker_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "callmaker_user", "-pcallmaker_pass"]
+      timeout: 20s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: callmaker-backend
+    ports:
+      - "5000:5000"
+    environment:
+      - DB_HOST=callmaker-mysql
+      - DB_USER=callmaker_user
+      - DB_PASSWORD=callmaker_pass
+      - DB_NAME=callmaker_db
+      - JWT_SECRET=jenkins-docker-secret-2024
+      - NODE_ENV=production
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: callmaker-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  callmaker_mysql_data:
