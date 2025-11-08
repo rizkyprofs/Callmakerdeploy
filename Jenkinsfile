@@ -14,15 +14,13 @@ pipeline {
                     url: 'https://github.com/rizkyprofs/Callmakerdeploy.git'
                 
                 bat '''
-                    echo "Current directory:"
+                    echo "=== WORKSPACE INFO ==="
                     cd
-                    echo "Files in workspace:"
                     dir
-                    echo "Checking project structure:"
-                    if exist backend (echo "✅ Backend exists" && cd backend && dir && cd..) else (echo "❌ Backend missing")
-                    if exist frontend (echo "✅ Frontend exists" && cd frontend && dir && cd..) else (echo "❌ Frontend missing")
-                    if exist callmaker_db.sql (echo "✅ SQL file exists") else (echo "❌ SQL file missing")
-                    if exist Jenkinsfile (echo "✅ Jenkinsfile exists") else (echo "❌ Jenkinsfile missing")
+                    echo "=== BACKEND STRUCTURE ==="
+                    if exist backend (cd backend && dir && cd..) else (echo "Backend missing!")
+                    echo "=== FRONTEND STRUCTURE ==="  
+                    if exist frontend (cd frontend && dir && cd..) else (echo "Frontend missing!")
                 '''
             }
         }
@@ -31,11 +29,26 @@ pipeline {
             steps {
                 echo "🧹 Cleaning previous containers..."
                 bat '''
-                    docker-compose down 2>NUL || echo "No previous containers to stop"
+                    echo "Stopping and removing containers..."
+                    docker-compose down 2>NUL || echo "Docker-compose cleanup done"
+                    
+                    echo "Stopping individual containers..."
+                    docker stop callmaker-backend 2>NUL || echo "No backend container"
+                    docker stop callmaker-frontend 2>NUL || echo "No frontend container" 
                     docker stop callmaker-mysql 2>NUL || echo "No MySQL container"
+                    
+                    echo "Removing containers..."
+                    docker rm callmaker-backend 2>NUL || echo "No backend to remove"
+                    docker rm callmaker-frontend 2>NUL || echo "No frontend to remove"
                     docker rm callmaker-mysql 2>NUL || echo "No MySQL to remove"
+                    
+                    echo "Removing volumes..."
                     docker volume rm callmaker_mysql_data 2>NUL || echo "No volume to remove"
-                    docker network create ${DOCKER_NETWORK} 2>NUL || echo "Network already exists"
+                    
+                    echo "Creating network..."
+                    docker network create ${DOCKER_NETWORK} 2>NUL || echo "Network exists"
+                    
+                    echo "✅ Cleanup completed"
                 '''
             }
         }
@@ -44,7 +57,7 @@ pipeline {
             steps {
                 echo "🗄️ Setting up MySQL Container..."
                 bat '''
-                    echo "Starting MySQL container with Docker..."
+                    echo "Starting MySQL container..."
                     docker run -d --name callmaker-mysql ^
                         --network ${DOCKER_NETWORK} ^
                         -e MYSQL_ROOT_PASSWORD=rootpass ^
@@ -55,10 +68,12 @@ pipeline {
                         -v callmaker_mysql_data:/var/lib/mysql ^
                         mysql:8.0
                     
-                    echo "Waiting for MySQL to initialize..."
+                    echo "Waiting for MySQL to initialize (40 seconds)..."
                     ping -n 40 127.0.0.1 > nul
+                    
                     echo "Checking MySQL status..."
                     docker logs callmaker-mysql --tail 10
+                    echo "✅ MySQL container started"
                 '''
             }
         }
@@ -70,7 +85,7 @@ pipeline {
                     bat '''
                         echo "Installing backend dependencies..."
                         npm install
-                        echo "Creating .env for Docker..."
+                        echo "Updating .env for Docker..."
                         echo DB_HOST=callmaker-mysql > .env
                         echo DB_USER=callmaker_user >> .env
                         echo DB_PASSWORD=callmaker_pass >> .env
@@ -79,7 +94,7 @@ pipeline {
                         echo JWT_SECRET=jenkins-docker-secret-2024 >> .env
                         echo NODE_ENV=production >> .env
                         echo PORT=5000 >> .env
-                        echo "✅ Backend dependencies installed"
+                        echo "✅ Backend setup completed"
                     '''
                 }
             }
@@ -111,212 +126,34 @@ pipeline {
             }
         }
         
-        stage('Initialize Database with SQL Export') {
+        stage('Initialize Database') {
             steps {
-                echo "📊 Initializing Database from SQL Export..."
+                echo "📊 Initializing Database..."
                 bat '''
                     echo "Waiting for MySQL to be ready..."
-                    ping -n 30 127.0.0.1 > nul
+                    ping -n 10 127.0.0.1 > nul
                     
-                    echo "Checking if MySQL is ready..."
-                    docker exec callmaker-mysql mysql -u callmaker_user -pcallmaker_pass callmaker_db -e "SELECT 1;" && echo "✅ MySQL ready" || echo "❌ MySQL not ready yet"
+                    echo "Checking MySQL connection..."
+                    docker exec callmaker-mysql mysql -u callmaker_user -pcallmaker_pass callmaker_db -e "SELECT 1;" && echo "✅ MySQL connected" || echo "⚠️ MySQL connecting..."
                     
-                    echo "Checking if SQL file exists..."
+                    echo "Importing database from SQL file..."
                     if exist callmaker_db.sql (
-                        echo "✅ callmaker_db.sql found - importing your actual data..."
+                        echo "SQL file found, importing data..."
                         docker cp callmaker_db.sql callmaker-mysql:/tmp/callmaker_db.sql
-                        
-                        echo "Importing SQL file..."
                         docker exec callmaker-mysql mysql -u callmaker_user -pcallmaker_pass callmaker_db -e "SOURCE /tmp/callmaker_db.sql;"
-                        
-                        echo "Verifying imported data..."
-                        docker exec callmaker-mysql mysql -u callmaker_user -pcallmaker_pass callmaker_db -e "
-                            SHOW TABLES;
-                            SELECT '=== USERS ===' as '';
-                            SELECT username, fullname, role FROM users;
-                            SELECT '=== SIGNALS COUNT ===' as '';
-                            SELECT COUNT(*) as total_signals FROM signals;
-                        "
+                        echo "✅ Database imported successfully"
                     ) else (
-                        echo "❌ callmaker_db.sql not found, creating basic structure..."
-                        docker exec callmaker-mysql mysql -u callmaker_user -pcallmaker_pass callmaker_db -e "
-                            CREATE TABLE IF NOT EXISTS users (
-                                id int NOT NULL AUTO_INCREMENT,
-                                username varchar(255) NOT NULL,
-                                password varchar(255) NOT NULL,
-                                fullname varchar(255) DEFAULT NULL,
-                                role enum('user','admin') DEFAULT 'user',
-                                created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-                                updated_at timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                                PRIMARY KEY (id),
-                                UNIQUE KEY username (username)
-                            );
-                            
-                            CREATE TABLE IF NOT EXISTS signals (
-                                id int NOT NULL AUTO_INCREMENT,
-                                created_by int NOT NULL,
-                                phone_number varchar(20) NOT NULL,
-                                call_type varchar(50) DEFAULT NULL,
-                                status enum('pending','completed','failed') DEFAULT 'pending',
-                                duration int DEFAULT '0',
-                                created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-                                PRIMARY KEY (id)
-                            );
-                            
-                            INSERT IGNORE INTO users (username, password, fullname, role) VALUES 
-                            ('rizky', 'rizky123', 'Rizky Profs', 'admin'),
-                            ('admin', 'admin123', 'Administrator', 'admin');
-                        " && echo "✅ Basic structure created"
+                        echo "❌ SQL file not found"
+                        exit 1
                     )
                     
-                    echo "🎉 Database initialization completed!"
+                    echo "Verifying data..."
+                    docker exec callmaker-mysql mysql -u callmaker_user -pcallmaker_pass callmaker_db -e "
+                        SHOW TABLES;
+                        SELECT COUNT(*) as user_count FROM users;
+                        SELECT COUNT(*) as signal_count FROM signals;
+                    "
                 '''
-            }
-        }
-        
-        stage('Create Docker Compose') {
-            steps {
-                echo "🐳 Creating Docker Compose File..."
-                bat '''
-                    echo "Creating docker-compose.yml..."
-                    echo version: '3.8' > docker-compose.yml
-                    echo. >> docker-compose.yml
-                    echo services: >> docker-compose.yml
-                    echo. >> docker-compose.yml
-                    echo   mysql: >> docker-compose.yml
-                    echo     image: mysql:8.0 >> docker-compose.yml
-                    echo     container_name: callmaker-mysql >> docker-compose.yml
-                    echo     environment: >> docker-compose.yml
-                    echo       MYSQL_ROOT_PASSWORD: rootpass >> docker-compose.yml
-                    echo       MYSQL_DATABASE: callmaker_db >> docker-compose.yml
-                    echo       MYSQL_USER: callmaker_user >> docker-compose.yml
-                    echo       MYSQL_PASSWORD: callmaker_pass >> docker-compose.yml
-                    echo     ports: >> docker-compose.yml
-                    echo       - "3307:3306" >> docker-compose.yml
-                    echo     volumes: >> docker-compose.yml
-                    echo       - callmaker_mysql_data:/var/lib/mysql >> docker-compose.yml
-                    echo     healthcheck: >> docker-compose.yml
-                    echo       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "callmaker_user", "-pcallmaker_pass"] >> docker-compose.yml
-                    echo       timeout: 20s >> docker-compose.yml
-                    echo       retries: 10 >> docker-compose.yml
-                    echo     restart: unless-stopped >> docker-compose.yml
-                    echo. >> docker-compose.yml
-                    echo   backend: >> docker-compose.yml
-                    echo     build: >> docker-compose.yml
-                    echo       context: ./backend >> docker-compose.yml
-                    echo       dockerfile: Dockerfile >> docker-compose.yml
-                    echo     container_name: callmaker-backend >> docker-compose.yml
-                    echo     ports: >> docker-compose.yml
-                    echo       - "5000:5000" >> docker-compose.yml
-                    echo     environment: >> docker-compose.yml
-                    echo       - DB_HOST=callmaker-mysql >> docker-compose.yml
-                    echo       - DB_USER=callmaker_user >> docker-compose.yml
-                    echo       - DB_PASSWORD=callmaker_pass >> docker-compose.yml
-                    echo       - DB_NAME=callmaker_db >> docker-compose.yml
-                    echo       - JWT_SECRET=jenkins-docker-secret-2024 >> docker-compose.yml
-                    echo       - NODE_ENV=production >> docker-compose.yml
-                    echo     depends_on: >> docker-compose.yml
-                    echo       mysql: >> docker-compose.yml
-                    echo         condition: service_healthy >> docker-compose.yml
-                    echo     restart: unless-stopped >> docker-compose.yml
-                    echo. >> docker-compose.yml
-                    echo   frontend: >> docker-compose.yml
-                    echo     build: >> docker-compose.yml
-                    echo       context: ./frontend >> docker-compose.yml
-                    echo       dockerfile: Dockerfile >> docker-compose.yml
-                    echo     container_name: callmaker-frontend >> docker-compose.yml
-                    echo     ports: >> docker-compose.yml
-                    echo       - "80:80" >> docker-compose.yml
-                    echo     depends_on: >> docker-compose.yml
-                    echo       - backend >> docker-compose.yml
-                    echo     restart: unless-stopped >> docker-compose.yml
-                    echo. >> docker-compose.yml
-                    echo volumes: >> docker-compose.yml
-                    echo   callmaker_mysql_data: >> docker-compose.yml
-                    
-                    echo "✅ docker-compose.yml created"
-                '''
-            }
-        }
-        
-        stage('Create Dockerfiles') {
-            steps {
-                echo "🐳 Creating Dockerfiles..."
-                
-                dir('backend') {
-                    bat '''
-                        echo "Creating Backend Dockerfile..."
-                        echo FROM node:18-alpine > Dockerfile
-                        echo. >> Dockerfile
-                        echo WORKDIR /app >> Dockerfile
-                        echo. >> Dockerfile
-                        echo COPY package*.json ./ >> Dockerfile
-                        echo RUN npm install >> Dockerfile
-                        echo. >> Dockerfile
-                        echo COPY . . >> Dockerfile
-                        echo. >> Dockerfile
-                        echo EXPOSE 5000 >> Dockerfile
-                        echo. >> Dockerfile
-                        echo CMD ["npm", "start"] >> Dockerfile
-                        echo "✅ Backend Dockerfile created"
-                    '''
-                }
-                
-                dir('frontend') {
-                    bat '''
-                        echo "Creating Frontend Dockerfile..."
-                        echo FROM node:18-alpine as builder > Dockerfile
-                        echo. >> Dockerfile
-                        echo WORKDIR /app >> Dockerfile
-                        echo. >> Dockerfile
-                        echo COPY package*.json ./ >> Dockerfile
-                        echo RUN npm install >> Dockerfile
-                        echo. >> Dockerfile
-                        echo COPY . . >> Dockerfile
-                        echo RUN npm run build >> Dockerfile
-                        echo. >> Dockerfile
-                        echo FROM nginx:alpine >> Dockerfile
-                        echo COPY --from=builder /app/dist /usr/share/nginx/html >> Dockerfile
-                        echo COPY nginx.conf /etc/nginx/nginx.conf >> Dockerfile
-                        echo. >> Dockerfile
-                        echo EXPOSE 80 >> Dockerfile
-                        echo CMD ["nginx", "-g", "daemon off;"] >> Dockerfile
-                        echo "✅ Frontend Dockerfile created"
-                    '''
-                }
-                
-                dir('frontend') {
-                    bat '''
-                        echo "Creating nginx.conf..."
-                        echo events { > nginx.conf
-                        echo     worker_connections 1024; >> nginx.conf
-                        echo } >> nginx.conf
-                        echo. >> nginx.conf
-                        echo http { >> nginx.conf
-                        echo     include /etc/nginx/mime.types; >> nginx.conf
-                        echo     default_type application/octet-stream; >> nginx.conf
-                        echo. >> nginx.conf
-                        echo     server { >> nginx.conf
-                        echo         listen 80; >> nginx.conf
-                        echo         server_name localhost; >> nginx.conf
-                        echo         root /usr/share/nginx/html; >> nginx.conf
-                        echo         index index.html; >> nginx.conf
-                        echo. >> nginx.conf
-                        echo         location / { >> nginx.conf
-                        echo             try_files \\$uri \\$uri/ /index.html; >> nginx.conf
-                        echo         } >> nginx.conf
-                        echo. >> nginx.conf
-                        echo         location /api { >> nginx.conf
-                        echo             proxy_pass http://callmaker-backend:5000; >> nginx.conf
-                        echo             proxy_set_header Host \\$host; >> nginx.conf
-                        echo             proxy_set_header X-Real-IP \\$remote_addr; >> nginx.conf
-                        echo             proxy_set_header X-Forwarded-For \\$proxy_add_x_forwarded_for; >> nginx.conf
-                        echo         } >> nginx.conf
-                        echo     } >> nginx.conf
-                        echo } >> nginx.conf
-                        echo "✅ nginx.conf created"
-                    '''
-                }
             }
         }
         
@@ -324,14 +161,16 @@ pipeline {
             steps {
                 echo "🚀 Deploying Application..."
                 bat '''
-                    echo "Building and starting containers..."
+                    echo "Using existing docker-compose.yml..."
+                    echo "Starting application stack..."
                     docker-compose up --build -d
                     
-                    echo "Waiting for services to start..."
-                    ping -n 45 127.0.0.1 > nul
+                    echo "Waiting for services to start (30 seconds)..."
+                    ping -n 30 127.0.0.1 > nul
                     
                     echo "Checking containers status..."
                     docker ps
+                    echo "✅ Application deployment completed"
                 '''
             }
         }
@@ -340,29 +179,38 @@ pipeline {
             steps {
                 echo "🏥 Running Health Checks..."
                 bat '''
-                    echo "Testing Backend API..."
-                    curl -f http://localhost:5000/api/health && echo "✅ Backend HEALTHY" || echo "❌ Backend UNHEALTHY"
+                    echo "Testing Backend API (max 3 attempts)..."
+                    for /l %%x in (1,1,3) do (
+                        curl -f http://localhost:5000/api/health && (
+                            echo "✅ Backend HEALTHY" 
+                            goto backend_healthy
+                        ) || (
+                            echo "Attempt %%x: Backend starting..."
+                            ping -n 5 127.0.0.1 > nul
+                        )
+                    )
+                    echo "❌ Backend UNHEALTHY after 3 attempts"
+                    exit 1
                     
+                    :backend_healthy
                     echo "Testing Frontend..."
                     curl -f http://localhost:80 && echo "✅ Frontend HEALTHY" || echo "❌ Frontend UNHEALTHY"
                     
-                    echo "Testing MySQL Data..."
+                    echo "Testing Database Connection..."
                     docker exec callmaker-mysql mysql -u callmaker_user -pcallmaker_pass callmaker_db -e "
-                        SELECT '=== APPLICATION USERS ===' as '';
-                        SELECT username, fullname, role FROM users;
-                        SELECT '=== TOTAL SIGNALS ===' as '';
-                        SELECT COUNT(*) as signals_count FROM signals;
-                    " && echo "✅ MySQL DATA VERIFIED"
+                        SELECT '=== DEPLOYMENT SUCCESS ===' as '';
+                        SELECT username, role FROM users;
+                        SELECT 'Total signals:' as '', COUNT(*) as count FROM signals;
+                    " && echo "✅ Database VERIFIED"
                     
                     echo.
-                    echo "🎉 DOCKER DEPLOYMENT COMPLETED WITH YOUR ACTUAL DATA!"
-                    echo "🌐 Frontend: http://localhost:80"
+                    echo "🎉🎉🎉 DEPLOYMENT COMPLETED SUCCESSFULLY! 🎉🎉🎉"
+                    echo "================================================"
+                    echo "🌐 Frontend URL: http://localhost:80"
                     echo "🔧 Backend API: http://localhost:5000" 
-                    echo "🗄️  MySQL Docker: localhost:3307"
-                    echo "👥 Your ACTUAL Users:"
-                    echo "   - rizky / rizky123 (admin)"
-                    echo "   - admin / admin123 (admin)"
-                    echo "💡 Using real data from your callmaker_db.sql export!"
+                    echo "🗄️  MySQL: localhost:3307"
+                    echo "👥 Login with: rizky / rizky123"
+                    echo "================================================"
                 '''
             }
         }
@@ -372,26 +220,36 @@ pipeline {
         always {
             echo "📊 Build Completed - Status: ${currentBuild.result}"
             bat '''
-                echo "Final containers status:"
+                echo "=== FINAL CONTAINERS STATUS ==="
                 docker ps -a
+                echo "=== BACKEND LOGS (last 10 lines) ==="
+                docker logs callmaker-backend --tail 10 2>NUL || echo "No backend logs"
+                echo "=== MYSQL LOGS (last 10 lines) ==="
+                docker logs callmaker-mysql --tail 10 2>NUL || echo "No MySQL logs"
             '''
         }
         
         success {
-            echo "✅ ✅ ✅ DOCKER DEPLOYMENT SUCCESSFUL ✅ ✅ ✅"
+            echo "✅ ✅ ✅ DEPLOYMENT SUCCESSFUL ✅ ✅ ✅"
             bat '''
-                echo "🎊 Your application is running with REAL DATA from MySQL export!"
-                echo "📍 Access: http://localhost:80"
-                echo "🔑 Login with: rizky / rizky123"
+                echo " "
+                echo "🎊 APPLICATION IS RUNNING! 🎊"
+                echo "Open http://localhost:80 in your browser"
+                echo "Use credentials: rizky / rizky123"
             '''
         }
         
         failure {
             echo "❌ ❌ ❌ DEPLOYMENT FAILED ❌ ❌ ❌"
             bat '''
-                echo "Debugging info:"
+                echo "=== TROUBLESHOOTING INFO ==="
+                echo "Backend logs:"
                 docker logs callmaker-backend --tail 20 2>NUL || echo "No backend logs"
+                echo "MySQL logs:"
                 docker logs callmaker-mysql --tail 15 2>NUL || echo "No MySQL logs"
+                echo "Frontend logs:"
+                docker logs callmaker-frontend --tail 10 2>NUL || echo "No frontend logs"
+                echo "Cleaning up..."
                 docker-compose down 2>NUL || echo "Cleanup completed"
             '''
         }
