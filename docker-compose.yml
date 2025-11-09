@@ -22,11 +22,11 @@ services:
       timeout: 5s
       retries: 5
 
-  app:
+  backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
-    container_name: callmaker-app
+    container_name: callmaker-backend
     environment:
       NODE_ENV: production
       DB_HOST: mysql
@@ -41,6 +41,19 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+    networks:
+      - callmaker-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: callmaker-frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
     networks:
       - callmaker-network
     restart: unless-stopped
