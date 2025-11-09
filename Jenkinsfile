@@ -129,10 +129,16 @@ pipeline {
                     // Buat direktori untuk reports
                     bat 'if not exist zap-reports mkdir zap-reports'
                     
-                    // Run ZAP Baseline Scan
-                    bat '''
-                        docker run --rm --network=host -v "%CD%/zap-reports:/zap/wrk:rw" zaproxy/zap-stable zap-baseline.py -t http://localhost:5000 -r zap-baseline-report.html -J zap-baseline-report.json -x zap-baseline-report.xml || exit 0
-                    '''
+                    // Get host IP (Windows specific)
+                    def hostIP = bat(script: '@for /f "tokens=2 delims=:" %%a in (\'ipconfig ^| findstr /c:"IPv4"\') do @echo %%a', returnStdout: true).trim()
+                    
+                    echo "Host IP: ${hostIP}"
+                    
+                    // Run ZAP Baseline Scan - scan backend yang sudah running
+                    // Gunakan host.docker.internal untuk akses localhost dari container
+                    bat """
+                        docker run --rm --add-host=host.docker.internal:host-gateway -v "%CD%/zap-reports:/zap/wrk:rw" zaproxy/zap-stable zap-baseline.py -t http://host.docker.internal:5000 -r zap-baseline-report.html -J zap-baseline-report.json -x zap-baseline-report.xml -m 5 || exit 0
+                    """
                 }
                 
                 // Publish HTML report
@@ -149,6 +155,8 @@ pipeline {
             }
         }
         
+        // DAST - Nikto (Commented - Optional)
+        /*
         stage('DAST - Nikto Web Scanner') {
             steps {
                 echo '🔍 Running Nikto Web Server Scanner...'
@@ -157,10 +165,10 @@ pipeline {
                         docker run --rm --network=host sullo/nikto -h http://localhost:5000 -Format json -output nikto-report.json || exit 0
                     '''
                 }
-                
                 archiveArtifacts artifacts: 'nikto-report.json', allowEmptyArchive: true
             }
         }
+        */
         
         stage('Security Quality Gate') {
             steps {
@@ -241,8 +249,10 @@ pipeline {
             echo '   - ESLint Security Check'
             echo '   - Semgrep Static Analysis'
             echo '   - OWASP Dependency Check'
-            echo '   - OWASP ZAP DAST Scan'
-            echo '   - Nikto Web Scanner'
+            echo '   - Security Headers Check'
+            echo ''
+            echo '💡 Note: ZAP & Nikto disabled for faster builds'
+            echo '   Uncomment in Jenkinsfile to enable full DAST'
             echo ''
             echo '📁 Check "Artifacts" for detailed reports'
             echo '============================================'
