@@ -9,20 +9,24 @@ pipeline {
             }
         }
         
+        stage('Stop Old Containers') {
+            steps {
+                echo 'Stopping and removing old containers...'
+                script {
+                    // Stop containers dengan nama yang sama
+                    bat '''
+                        docker rm -f callmaker-mysql callmaker-backend callmaker-frontend || exit 0
+                        docker-compose down -v || exit 0
+                    '''
+                }
+            }
+        }
+        
         stage('Build Docker Images') {
             steps {
                 echo 'Building Docker images...'
                 script {
                     bat 'docker-compose build'
-                }
-            }
-        }
-        
-        stage('Stop Old Containers') {
-            steps {
-                echo 'Stopping old containers...'
-                script {
-                    bat 'docker-compose down || exit 0'
                 }
             }
         }
@@ -42,7 +46,7 @@ pipeline {
                 script {
                     sleep 20
                     bat 'docker-compose ps'
-                    bat 'docker-compose logs backend'
+                    bat 'docker-compose logs --tail=50 backend'
                 }
             }
         }
@@ -56,7 +60,7 @@ pipeline {
         }
         failure {
             echo '❌ Deployment failed!'
-            bat 'docker-compose logs'
+            bat 'docker-compose logs --tail=100'
         }
     }
 }
