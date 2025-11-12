@@ -124,7 +124,7 @@ pipeline {
         
         stage('DAST - OWASP ZAP Baseline Scan') {
             steps {
-                echo '🔍 Running OWASP ZAP Dynamic Security Scan...'
+                echo '🔍 Running OWASP ZAP Baseline (Passive) Scan...'
                 script {
                     // Buat direktori untuk reports
                     bat 'if not exist zap-reports mkdir zap-reports'
@@ -134,8 +134,7 @@ pipeline {
                     
                     echo "Host IP: ${hostIP}"
                     
-                    // Run ZAP Baseline Scan - scan backend yang sudah running
-                    // Gunakan host.docker.internal untuk akses localhost dari container
+                    // Run ZAP Baseline Scan (Passive)
                     bat """
                         docker run --rm --add-host=host.docker.internal:host-gateway -v "%CD%/zap-reports:/zap/wrk:rw" zaproxy/zap-stable zap-baseline.py -t http://host.docker.internal:5000 -r zap-baseline-report.html -J zap-baseline-report.json -x zap-baseline-report.xml -m 5 || exit 0
                     """
@@ -148,27 +147,58 @@ pipeline {
                     keepAll: true,
                     reportDir: 'zap-reports',
                     reportFiles: 'zap-baseline-report.html',
-                    reportName: 'OWASP ZAP Security Report'
+                    reportName: 'OWASP ZAP Baseline Report'
                 ])
                 
-                archiveArtifacts artifacts: 'zap-reports/*', allowEmptyArchive: true
+                archiveArtifacts artifacts: 'zap-reports/zap-baseline*', allowEmptyArchive: true
             }
         }
         
-        // DAST - Nikto (Commented - Optional)
-        /*
+        stage('DAST - OWASP ZAP Active Scan (SQL Injection, XSS, etc)') {
+            steps {
+                echo '🔍 Running OWASP ZAP Active Scan (Testing for SQL Injection, XSS, etc)...'
+                script {
+                    // Run ZAP API Scan - actively test endpoints
+                    bat """
+                        docker run --rm --add-host=host.docker.internal:host-gateway -v "%CD%/zap-reports:/zap/wrk:rw" zaproxy/zap-stable zap-api-scan.py -t http://host.docker.internal:5000/api -f openapi -r zap-api-report.html -J zap-api-report.json -x zap-api-report.xml -m 10 || exit 0
+                    """
+                    
+                    // Alternative: Full Scan (lebih lama, lebih thorough)
+                    // Uncomment jika mau full scan
+                    /*
+                    bat """
+                        docker run --rm --add-host=host.docker.internal:host-gateway -v "%CD%/zap-reports:/zap/wrk:rw" zaproxy/zap-stable zap-full-scan.py -t http://host.docker.internal:5000 -r zap-full-report.html -J zap-full-report.json -x zap-full-report.xml -m 15 || exit 0
+                    """
+                    */
+                }
+                
+                // Publish Active Scan Report
+                publishHTML([
+                    allowMissing: true,
+                    alwaysLinkToLastBuild: true,
+                    keepAll: true,
+                    reportDir: 'zap-reports',
+                    reportFiles: 'zap-api-report.html',
+                    reportName: 'OWASP ZAP Active Scan Report'
+                ])
+                
+                archiveArtifacts artifacts: 'zap-reports/zap-api*', allowEmptyArchive: true
+            }
+        }
+        
         stage('DAST - Nikto Web Scanner') {
             steps {
                 echo '🔍 Running Nikto Web Server Scanner...'
                 script {
+                    // Nikto juga pakai host.docker.internal
                     bat '''
-                        docker run --rm --network=host sullo/nikto -h http://localhost:5000 -Format json -output nikto-report.json || exit 0
+                        docker run --rm --add-host=host.docker.internal:host-gateway sullo/nikto -h http://host.docker.internal:5000 -Format json -output nikto-report.json -Tuning 1 2 3 -timeout 5 || exit 0
                     '''
                 }
+                
                 archiveArtifacts artifacts: 'nikto-report.json', allowEmptyArchive: true
             }
         }
-        */
         
         stage('Security Quality Gate') {
             steps {
@@ -249,10 +279,9 @@ pipeline {
             echo '   - ESLint Security Check'
             echo '   - Semgrep Static Analysis'
             echo '   - OWASP Dependency Check'
-            echo '   - Security Headers Check'
-            echo ''
-            echo '💡 Note: ZAP & Nikto disabled for faster builds'
-            echo '   Uncomment in Jenkinsfile to enable full DAST'
+            echo '   - OWASP ZAP Baseline Scan (Passive)'
+            echo '   - OWASP ZAP Active Scan (SQL Injection, XSS, etc)'
+            echo '   - Nikto Web Scanner'
             echo ''
             echo '📁 Check "Artifacts" for detailed reports'
             echo '============================================'
