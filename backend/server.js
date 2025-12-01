@@ -1,4 +1,4 @@
-// server.js - HYBRID FIXED VERSION
+// server.js - SECURITY FIXED VERSION
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -14,6 +14,7 @@ import signal from "./routes/signal.js";
 dotenv.config();
 const app = express();
 
+// ✅ FIX: Disable X-Powered-By header (Low Risk - Server Leaks Information)
 app.disable('x-powered-by');
 
 app.use(cors({
@@ -28,23 +29,52 @@ app.use((req, res, next) => {
   next();
 });
 
+// ✅ SECURITY HEADERS - IMPROVED VERSION
 app.use((req, res, next) => {
+  // Prevent MIME sniffing
   res.setHeader('X-Content-Type-Options', 'nosniff');
+  
+  // Prevent clickjacking
   res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
-  res.setHeader('Content-Security-Policy', "default-src 'self'");
-  res.setHeader('Cache-Control', 'no-store, max-age=0');
+  
+  // ✅ FIX: Permissions Policy (Low Risk - was not set for /api)
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()');
+  
+  // ✅ FIX: Comprehensive CSP with all required directives (Medium Risk)
+  // Including frame-ancestors and form-action that were missing
+  res.setHeader('Content-Security-Policy', 
+    "default-src 'self'; " +
+    "script-src 'self'; " +
+    "style-src 'self' 'unsafe-inline'; " +
+    "img-src 'self' data: https:; " +
+    "font-src 'self'; " +
+    "connect-src 'self'; " +
+    "frame-ancestors 'none'; " +  // ✅ Added - prevents framing
+    "form-action 'self'; " +       // ✅ Added - restricts form submissions
+    "base-uri 'self'; " +
+    "object-src 'none'"
+  );
+  
+  // ✅ FIX: Proper cache control for API responses (Informational)
+  // Prevents caching of sensitive data
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, private');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  
+  // Additional security headers
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  
   next();
 });
 
 // ✅ ROUTES UTAMA
-app.use("/api/auth", authRoutes);    // Login/Register ada di sini
+app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api", signalRoutes);
 app.use("/api/signals", signal);
 
-
-// ✅ ✅ ✅ DASHBOARD ROUTES - UNCOMMENT YANG INI ✅ ✅ ✅
+// ✅ DASHBOARD ROUTES
 // Get current user data
 app.get("/api/user", async (req, res) => {
   try {
@@ -72,6 +102,8 @@ app.get("/api/user", async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    // ✅ Set proper Content-Type for JSON API responses
+    res.setHeader('Content-Type', 'application/json');
     res.json({
       id: user.id,
       username: user.username,
@@ -100,14 +132,15 @@ app.get("/api/signals/user", async (req, res) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret');
     
     const signals = await Signal.findAll({
-      where: { created_by: decoded.userId }, // ✅ created_by, bukan userId
+      where: { created_by: decoded.userId },
       order: [['created_at', 'DESC']]
     });
 
+    res.setHeader('Content-Type', 'application/json');
     res.json(signals || []);
   } catch (error) {
     console.error('Error fetching signals:', error);
-    res.json([]);
+    res.status(500).json([]);
   }
 });
 
@@ -125,25 +158,38 @@ app.get("/api/signals/pending/count", async (req, res) => {
     
     const count = await Signal.count({
       where: { 
-        created_by: decoded.userId, // ✅ created_by, bukan userId
+        created_by: decoded.userId,
         status: 'pending'
       }
     });
 
+    res.setHeader('Content-Type', 'application/json');
     res.json({ count: count || 0 });
   } catch (error) {
     console.error('Error counting pending signals:', error);
-    res.json({ count: 0 });
+    res.status(500).json({ count: 0 });
   }
 });
 
 // Health check
 app.get("/api/health", (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
   res.json({ 
     status: "OK", 
     database: "Connected",
     timestamp: new Date().toISOString()
   });
+});
+
+// ✅ Handle 404 for undefined routes
+app.use((req, res) => {
+  res.status(404).json({ error: 'Endpoint not found' });
+});
+
+// ✅ Global error handler
+app.use((err, req, res, next) => {
+  console.error('Server error:', err);
+  res.status(500).json({ error: 'Internal server error' });
 });
 
 // Sync database
@@ -157,6 +203,11 @@ sequelize.sync({ force: false })
 
 app.listen(5000, () => {
   console.log("🚀 Server running on port 5000");
+  console.log("🔒 Security headers enabled:");
+  console.log("   ✓ X-Powered-By disabled");
+  console.log("   ✓ CSP with frame-ancestors & form-action");
+  console.log("   ✓ Permissions-Policy configured");
+  console.log("   ✓ Cache-Control for sensitive data");
   console.log("🔑 Login endpoint: POST /api/auth/login");
   console.log("📊 Dashboard endpoints:");
   console.log("   GET /api/user");
