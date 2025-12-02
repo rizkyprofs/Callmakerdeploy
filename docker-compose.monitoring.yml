@@ -1,21 +1,4 @@
 services:
-  # MySQL Database
-  mysql:
-    image: mysql:8.0
-    container_name: callmaker-mysql
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: callmaker_db
-      MYSQL_USER: callmaker
-      MYSQL_PASSWORD: callmaker123
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-    networks:
-      - monitoring
-    command: --default-authentication-plugin=mysql_native_password
-
   # Prometheus
   prometheus:
     image: prom/prometheus:latest
@@ -61,18 +44,20 @@ services:
       - monitoring
     restart: unless-stopped
 
-  # MySQL Exporter
+  # MySQL Exporter (mengakses MySQL yang SUDAH RUNNING)
   mysql-exporter:
     image: prom/mysqld-exporter:latest
     container_name: callmaker-mysql-exporter
     ports:
       - "9104:9104"
     environment:
-      - DATA_SOURCE_NAME=callmaker:callmaker123@(mysql:3306)/callmaker_db
+      # Jika MySQL kamu berjalan sebagai container dengan nama "callmaker-mysql"
+      - DATA_SOURCE_NAME=callmaker:callmaker123@(callmaker-mysql:3306)/callmaker_db
+      
+      # Jika MySQL berjalan DI HOST (bukan container), gunakan ini:
+      # - DATA_SOURCE_NAME=callmaker:callmaker123@(host.docker.internal:3306)/callmaker_db
     networks:
       - monitoring
-    depends_on:
-      - mysql
     restart: unless-stopped
 
 networks:
@@ -80,6 +65,5 @@ networks:
     driver: bridge
 
 volumes:
-  mysql_data:
   prometheus_data:
   grafana_data:
