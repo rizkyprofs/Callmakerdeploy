@@ -1,7 +1,5 @@
-version: '3.8'
-
 services:
-  # MySQL Database (sesuaikan dengan config Anda)
+  # MySQL Database
   mysql:
     image: mysql:8.0
     container_name: callmaker-mysql
@@ -17,36 +15,6 @@ services:
     networks:
       - monitoring
     command: --default-authentication-plugin=mysql_native_password
-
-  # Backend API
-  backend:
-    build: ./backend
-    container_name: callmaker-backend
-    ports:
-      - "5000:5000"
-    environment:
-      - NODE_ENV=production
-      - DB_HOST=mysql
-      - DB_PORT=3306
-      - DB_NAME=callmaker_db
-      - DB_USER=callmaker
-      - DB_PASSWORD=callmaker123
-      - JWT_SECRET=your_jwt_secret_here
-    depends_on:
-      - mysql
-    networks:
-      - monitoring
-    restart: unless-stopped
-
-  # Frontend
-  frontend:
-    build: ./client
-    container_name: callmaker-frontend
-    ports:
-      - "5173:5173"
-    networks:
-      - monitoring
-    restart: unless-stopped
 
   # Prometheus
   prometheus:
@@ -83,7 +51,7 @@ services:
     depends_on:
       - prometheus
 
-  # Node Exporter (System Metrics)
+  # Node Exporter
   node-exporter:
     image: prom/node-exporter:latest
     container_name: callmaker-node-exporter
