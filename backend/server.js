@@ -18,13 +18,15 @@ const app = express();
 // ✅ FIX: Disable X-Powered-By header (Low Risk - Server Leaks Information)
 app.disable('x-powered-by');
 
+app.use(metricsMiddleware);
+
 app.use(cors({
   origin: "http://localhost:5173",
   credentials: true
 }));
 app.use(express.json());
 
-app.use(metricsMiddleware);
+
 
 // Log requests untuk debug
 app.use((req, res, next) => {
@@ -71,7 +73,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get('/metrics', metricsHandler);
+
 
 // ✅ ROUTES UTAMA
 app.use("/api/auth", authRoutes);
@@ -185,6 +187,8 @@ app.get("/api/health", (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+
+app.get('/metrics', metricsHandler);
 
 // ✅ Handle 404 for undefined routes
 app.use((req, res) => {
