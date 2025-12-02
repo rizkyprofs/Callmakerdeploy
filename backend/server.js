@@ -10,6 +10,7 @@ import sequelize from "./config/db.js";
 import User from "./models/User.js";
 import Signal from "./models/Signal.js";
 import signal from "./routes/signal.js";
+import { metricsMiddleware, metricsHandler } from "./middleware/metrics.js";
 
 dotenv.config();
 const app = express();
@@ -22,6 +23,8 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
+
+app.use(metricsMiddleware);
 
 // Log requests untuk debug
 app.use((req, res, next) => {
@@ -67,6 +70,8 @@ app.use((req, res, next) => {
   
   next();
 });
+
+app.get('/metrics', metricsHandler);
 
 // ✅ ROUTES UTAMA
 app.use("/api/auth", authRoutes);

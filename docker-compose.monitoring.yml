@@ -1,0 +1,117 @@
+version: '3.8'
+
+services:
+  # MySQL Database (sesuaikan dengan config Anda)
+  mysql:
+    image: mysql:8.0
+    container_name: callmaker-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: callmaker_db
+      MYSQL_USER: callmaker
+      MYSQL_PASSWORD: callmaker123
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - monitoring
+    command: --default-authentication-plugin=mysql_native_password
+
+  # Backend API
+  backend:
+    build: ./backend
+    container_name: callmaker-backend
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_NAME=callmaker_db
+      - DB_USER=callmaker
+      - DB_PASSWORD=callmaker123
+      - JWT_SECRET=your_jwt_secret_here
+    depends_on:
+      - mysql
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  # Frontend
+  frontend:
+    build: ./client
+    container_name: callmaker-frontend
+    ports:
+      - "5173:5173"
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  # Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: callmaker-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  # Grafana
+  grafana:
+    image: grafana/grafana:latest
+    container_name: callmaker-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - monitoring
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
+  # Node Exporter (System Metrics)
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: callmaker-node-exporter
+    ports:
+      - "9100:9100"
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  # MySQL Exporter
+  mysql-exporter:
+    image: prom/mysqld-exporter:latest
+    container_name: callmaker-mysql-exporter
+    ports:
+      - "9104:9104"
+    environment:
+      - DATA_SOURCE_NAME=callmaker:callmaker123@(mysql:3306)/callmaker_db
+    networks:
+      - monitoring
+    depends_on:
+      - mysql
+    restart: unless-stopped
+
+networks:
+  monitoring:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  prometheus_data:
+  grafana_data:
