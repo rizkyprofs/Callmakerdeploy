@@ -10,7 +10,7 @@ import sequelize from "./config/db.js";
 import User from "./models/User.js";
 import Signal from "./models/Signal.js";
 import signal from "./routes/signal.js";
-import { metricsMiddleware, metricsHandler } from "./middleware/metrics.js";
+import { metricsMiddleware, metricsHandler } from "./metrics.js";
 
 dotenv.config();
 const app = express();
