@@ -91,8 +91,11 @@ services:
 volumes:
   mysql_data:
     driver: local
-    prometheus_data:
-    grafana_data:
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
 networks:
   callmaker-network:
     driver: bridge
