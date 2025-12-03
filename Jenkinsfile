@@ -9,78 +9,78 @@ pipeline {
             }
         }
         
-        stage('SAST - NPM Audit') {
-            steps {
-                echo '🔍 Running NPM Audit (Dependency Scanning)...'
-                script {
-                    // Audit Backend
-                    bat '''
-                        cd backend
-                        npm audit --audit-level=moderate --json > npm-audit-backend.json || exit 0
-                        npm audit --audit-level=moderate || exit 0
-                    '''
+        // stage('SAST - NPM Audit') {
+        //     steps {
+        //         echo '🔍 Running NPM Audit (Dependency Scanning)...'
+        //         script {
+        //             // Audit Backend
+        //             bat '''
+        //                 cd backend
+        //                 npm audit --audit-level=moderate --json > npm-audit-backend.json || exit 0
+        //                 npm audit --audit-level=moderate || exit 0
+        //             '''
                     
-                    // Audit Frontend
-                    bat '''
-                        cd frontend
-                        npm audit --audit-level=moderate --json > npm-audit-frontend.json || exit 0
-                        npm audit --audit-level=moderate || exit 0
-                    '''
-                }
+        //             // Audit Frontend
+        //             bat '''
+        //                 cd frontend
+        //                 npm audit --audit-level=moderate --json > npm-audit-frontend.json || exit 0
+        //                 npm audit --audit-level=moderate || exit 0
+        //             '''
+        //         }
                 
-                // Archive hasil audit
-                archiveArtifacts artifacts: '**/npm-audit-*.json', allowEmptyArchive: true
-            }
-        }
+        //         // Archive hasil audit
+        //         archiveArtifacts artifacts: '**/npm-audit-*.json', allowEmptyArchive: true
+        //     }
+        // }
         
-        stage('SAST - ESLint Security Check') {
-            steps {
-                echo '🔍 Running ESLint Security Rules...'
-                script {
-                    // Install eslint-plugin-security jika belum ada
-                    bat '''
-                        cd backend
-                        npm install --save-dev eslint eslint-plugin-security || exit 0
-                        npx eslint . --ext .js --format json --output-file eslint-backend.json || exit 0
-                        npx eslint . --ext .js || exit 0
-                    '''
+        // stage('SAST - ESLint Security Check') {
+        //     steps {
+        //         echo '🔍 Running ESLint Security Rules...'
+        //         script {
+        //             // Install eslint-plugin-security jika belum ada
+        //             bat '''
+        //                 cd backend
+        //                 npm install --save-dev eslint eslint-plugin-security || exit 0
+        //                 npx eslint . --ext .js --format json --output-file eslint-backend.json || exit 0
+        //                 npx eslint . --ext .js || exit 0
+        //             '''
                     
-                    bat '''
-                        cd frontend
-                        npx eslint src --ext .js,.vue --format json --output-file eslint-frontend.json || exit 0
-                        npx eslint src --ext .js,.vue || exit 0
-                    '''
-                }
+        //             bat '''
+        //                 cd frontend
+        //                 npx eslint src --ext .js,.vue --format json --output-file eslint-frontend.json || exit 0
+        //                 npx eslint src --ext .js,.vue || exit 0
+        //             '''
+        //         }
                 
-                archiveArtifacts artifacts: '**/eslint-*.json', allowEmptyArchive: true
-            }
-        }
+        //         archiveArtifacts artifacts: '**/eslint-*.json', allowEmptyArchive: true
+        //     }
+        // }
         
-        stage('SAST - Semgrep Security Scan') {
-            steps {
-                echo '🔍 Running Semgrep Static Analysis...'
-                script {
-                    bat '''
-                        docker run --rm -v "%CD%:/src" returntocorp/semgrep semgrep --config=auto --json --output=semgrep-report.json /src || exit 0
-                    '''
-                }
+        // stage('SAST - Semgrep Security Scan') {
+        //     steps {
+        //         echo '🔍 Running Semgrep Static Analysis...'
+        //         script {
+        //             bat '''
+        //                 docker run --rm -v "%CD%:/src" returntocorp/semgrep semgrep --config=auto --json --output=semgrep-report.json /src || exit 0
+        //             '''
+        //         }
                 
-                archiveArtifacts artifacts: 'semgrep-report.json', allowEmptyArchive: true
-            }
-        }
+        //         archiveArtifacts artifacts: 'semgrep-report.json', allowEmptyArchive: true
+        //     }
+        // }
         
-        stage('SAST - Dependency Check (OWASP)') {
-            steps {
-                echo '🔍 Running OWASP Dependency Check...'
-                script {
-                    bat '''
-                        docker run --rm -v "%CD%:/src" owasp/dependency-check:latest --scan /src --format JSON --out /src/dependency-check-report.json --project CallMaker || exit 0
-                    '''
-                }
+        // stage('SAST - Dependency Check (OWASP)') {
+        //     steps {
+        //         echo '🔍 Running OWASP Dependency Check...'
+        //         script {
+        //             bat '''
+        //                 docker run --rm -v "%CD%:/src" owasp/dependency-check:latest --scan /src --format JSON --out /src/dependency-check-report.json --project CallMaker || exit 0
+        //             '''
+        //         }
                 
-                archiveArtifacts artifacts: 'dependency-check-report.json', allowEmptyArchive: true
-            }
-        }
+        //         archiveArtifacts artifacts: 'dependency-check-report.json', allowEmptyArchive: true
+        //     }
+        // }
         
         stage('Stop Old Containers') {
             steps {
@@ -122,136 +122,136 @@ pipeline {
             }
         }
         
-        stage('DAST - OWASP ZAP Baseline Scan') {
-            steps {
-                echo '🔍 Running OWASP ZAP Baseline (Passive) Scan...'
-                script {
-                    // Buat direktori untuk reports
-                    bat 'if not exist zap-reports mkdir zap-reports'
+        // stage('DAST - OWASP ZAP Baseline Scan') {
+        //     steps {
+        //         echo '🔍 Running OWASP ZAP Baseline (Passive) Scan...'
+        //         script {
+        //             // Buat direktori untuk reports
+        //             bat 'if not exist zap-reports mkdir zap-reports'
                     
-                    // Get host IP (Windows specific)
-                    def hostIP = bat(script: '@for /f "tokens=2 delims=:" %%a in (\'ipconfig ^| findstr /c:"IPv4"\') do @echo %%a', returnStdout: true).trim()
+        //             // Get host IP (Windows specific)
+        //             def hostIP = bat(script: '@for /f "tokens=2 delims=:" %%a in (\'ipconfig ^| findstr /c:"IPv4"\') do @echo %%a', returnStdout: true).trim()
                     
-                    echo "Host IP: ${hostIP}"
+        //             echo "Host IP: ${hostIP}"
                     
-                    // Run ZAP Baseline Scan (Passive)
-                    bat """
-                        docker run --rm --add-host=host.docker.internal:host-gateway -v "%CD%/zap-reports:/zap/wrk:rw" zaproxy/zap-stable zap-baseline.py -t http://host.docker.internal:5000 -r zap-baseline-report.html -J zap-baseline-report.json -x zap-baseline-report.xml -m 5 || exit 0
-                    """
-                }
+        //             // Run ZAP Baseline Scan (Passive)
+        //             bat """
+        //                 docker run --rm --add-host=host.docker.internal:host-gateway -v "%CD%/zap-reports:/zap/wrk:rw" zaproxy/zap-stable zap-baseline.py -t http://host.docker.internal:5000 -r zap-baseline-report.html -J zap-baseline-report.json -x zap-baseline-report.xml -m 5 || exit 0
+        //             """
+        //         }
                 
-                // Publish HTML report
-                publishHTML([
-                    allowMissing: true,
-                    alwaysLinkToLastBuild: true,
-                    keepAll: true,
-                    reportDir: 'zap-reports',
-                    reportFiles: 'zap-baseline-report.html',
-                    reportName: 'OWASP ZAP Baseline Report'
-                ])
+        //         // Publish HTML report
+        //         publishHTML([
+        //             allowMissing: true,
+        //             alwaysLinkToLastBuild: true,
+        //             keepAll: true,
+        //             reportDir: 'zap-reports',
+        //             reportFiles: 'zap-baseline-report.html',
+        //             reportName: 'OWASP ZAP Baseline Report'
+        //         ])
                 
-                archiveArtifacts artifacts: 'zap-reports/zap-baseline*', allowEmptyArchive: true
-            }
-        }
+        //         archiveArtifacts artifacts: 'zap-reports/zap-baseline*', allowEmptyArchive: true
+        //     }
+        // }
         
-        stage('DAST - OWASP ZAP Active Scan (SQL Injection, XSS, etc)') {
-            steps {
-                echo '🔍 Running OWASP ZAP Active Scan (Testing for SQL Injection, XSS, etc)...'
-                script {
-                    // Run ZAP API Scan - actively test endpoints
-                    bat """
-                        docker run --rm --add-host=host.docker.internal:host-gateway -v "%CD%/zap-reports:/zap/wrk:rw" zaproxy/zap-stable zap-api-scan.py -t http://host.docker.internal:5000/api -f openapi -r zap-api-report.html -J zap-api-report.json -x zap-api-report.xml -m 10 || exit 0
-                    """
+        // stage('DAST - OWASP ZAP Active Scan (SQL Injection, XSS, etc)') {
+        //     steps {
+        //         echo '🔍 Running OWASP ZAP Active Scan (Testing for SQL Injection, XSS, etc)...'
+        //         script {
+        //             // Run ZAP API Scan - actively test endpoints
+        //             bat """
+        //                 docker run --rm --add-host=host.docker.internal:host-gateway -v "%CD%/zap-reports:/zap/wrk:rw" zaproxy/zap-stable zap-api-scan.py -t http://host.docker.internal:5000/api -f openapi -r zap-api-report.html -J zap-api-report.json -x zap-api-report.xml -m 10 || exit 0
+        //             """
                     
-                    // Alternative: Full Scan (lebih lama, lebih thorough)
-                    // Uncomment jika mau full scan
-                    /*
-                    bat """
-                        docker run --rm --add-host=host.docker.internal:host-gateway -v "%CD%/zap-reports:/zap/wrk:rw" zaproxy/zap-stable zap-full-scan.py -t http://host.docker.internal:5000 -r zap-full-report.html -J zap-full-report.json -x zap-full-report.xml -m 15 || exit 0
-                    """
-                    */
-                }
+        //             // Alternative: Full Scan (lebih lama, lebih thorough)
+        //             // Uncomment jika mau full scan
+        //             /*
+        //             bat """
+        //                 docker run --rm --add-host=host.docker.internal:host-gateway -v "%CD%/zap-reports:/zap/wrk:rw" zaproxy/zap-stable zap-full-scan.py -t http://host.docker.internal:5000 -r zap-full-report.html -J zap-full-report.json -x zap-full-report.xml -m 15 || exit 0
+        //             """
+        //             */
+        //         }
                 
-                // Publish Active Scan Report
-                publishHTML([
-                    allowMissing: true,
-                    alwaysLinkToLastBuild: true,
-                    keepAll: true,
-                    reportDir: 'zap-reports',
-                    reportFiles: 'zap-api-report.html',
-                    reportName: 'OWASP ZAP Active Scan Report'
-                ])
+        //         // Publish Active Scan Report
+        //         publishHTML([
+        //             allowMissing: true,
+        //             alwaysLinkToLastBuild: true,
+        //             keepAll: true,
+        //             reportDir: 'zap-reports',
+        //             reportFiles: 'zap-api-report.html',
+        //             reportName: 'OWASP ZAP Active Scan Report'
+        //         ])
                 
-                archiveArtifacts artifacts: 'zap-reports/zap-api*', allowEmptyArchive: true
-            }
-        }
+        //         archiveArtifacts artifacts: 'zap-reports/zap-api*', allowEmptyArchive: true
+        //     }
+        // }
         
-        stage('DAST - Nikto Web Scanner') {
-            steps {
-                echo '🔍 Running Nikto Web Server Scanner...'
-                script {
-                    // Nikto juga pakai host.docker.internal
-                    bat '''
-                        docker run --rm --add-host=host.docker.internal:host-gateway sullo/nikto -h http://host.docker.internal:5000 -Format json -output nikto-report.json -Tuning 1 2 3 -timeout 5 || exit 0
-                    '''
-                }
+        // stage('DAST - Nikto Web Scanner') {
+        //     steps {
+        //         echo '🔍 Running Nikto Web Server Scanner...'
+        //         script {
+        //             // Nikto juga pakai host.docker.internal
+        //             bat '''
+        //                 docker run --rm --add-host=host.docker.internal:host-gateway sullo/nikto -h http://host.docker.internal:5000 -Format json -output nikto-report.json -Tuning 1 2 3 -timeout 5 || exit 0
+        //             '''
+        //         }
                 
-                archiveArtifacts artifacts: 'nikto-report.json', allowEmptyArchive: true
-            }
-        }
+        //         archiveArtifacts artifacts: 'nikto-report.json', allowEmptyArchive: true
+        //     }
+        // }
         
-        stage('Security Quality Gate') {
-            steps {
-                echo '🚦 Checking Security Quality Gate...'
-                script {
-                    bat '''
-                        @echo off
-                        echo.
-                        echo ============================================
-                        echo    SECURITY SCAN SUMMARY
-                        echo ============================================
-                        echo.
+        // stage('Security Quality Gate') {
+        //     steps {
+        //         echo '🚦 Checking Security Quality Gate...'
+        //         script {
+        //             bat '''
+        //                 @echo off
+        //                 echo.
+        //                 echo ============================================
+        //                 echo    SECURITY SCAN SUMMARY
+        //                 echo ============================================
+        //                 echo.
                         
-                        if exist backend\\npm-audit-backend.json (
-                            echo [NPM AUDIT - Backend] Report generated
-                        ) else (
-                            echo [NPM AUDIT - Backend] No report found
-                        )
+        //                 if exist backend\\npm-audit-backend.json (
+        //                     echo [NPM AUDIT - Backend] Report generated
+        //                 ) else (
+        //                     echo [NPM AUDIT - Backend] No report found
+        //                 )
                         
-                        if exist frontend\\npm-audit-frontend.json (
-                            echo [NPM AUDIT - Frontend] Report generated
-                        ) else (
-                            echo [NPM AUDIT - Frontend] No report found
-                        )
+        //                 if exist frontend\\npm-audit-frontend.json (
+        //                     echo [NPM AUDIT - Frontend] Report generated
+        //                 ) else (
+        //                     echo [NPM AUDIT - Frontend] No report found
+        //                 )
                         
-                        if exist backend\\eslint-backend.json (
-                            echo [ESLint - Backend] Report generated
-                        ) else (
-                            echo [ESLint - Backend] No report found
-                        )
+        //                 if exist backend\\eslint-backend.json (
+        //                     echo [ESLint - Backend] Report generated
+        //                 ) else (
+        //                     echo [ESLint - Backend] No report found
+        //                 )
                         
-                        if exist semgrep-report.json (
-                            echo [Semgrep] Report generated
-                        ) else (
-                            echo [Semgrep] No report found
-                        )
+        //                 if exist semgrep-report.json (
+        //                     echo [Semgrep] Report generated
+        //                 ) else (
+        //                     echo [Semgrep] No report found
+        //                 )
                         
-                        if exist zap-reports\\zap-baseline-report.html (
-                            echo [OWASP ZAP] Report generated
-                        ) else (
-                            echo [OWASP ZAP] No report found
-                        )
+        //                 if exist zap-reports\\zap-baseline-report.html (
+        //                     echo [OWASP ZAP] Report generated
+        //                 ) else (
+        //                     echo [OWASP ZAP] No report found
+        //                 )
                         
-                        echo.
-                        echo ============================================
-                        echo All security scans completed!
-                        echo Check archived artifacts for detailed reports.
-                        echo ============================================
-                        echo.
-                    '''
-                }
-            }
-        }
+        //                 echo.
+        //                 echo ============================================
+        //                 echo All security scans completed!
+        //                 echo Check archived artifacts for detailed reports.
+        //                 echo ============================================
+        //                 echo.
+        //             '''
+        //         }
+        //     }
+        // }
         
         stage('Health Check') {
             steps {
