@@ -58,15 +58,17 @@ services:
       - callmaker-network
     restart: unless-stopped
 
-  prometheus:
-    image: prom/prometheus:latest
-    ports:
-      - "9090:9090"
-    volumes:
-      - - ./monitoring/prometheus/:/etc/prometheus/
-      - prometheus_data:/prometheus
-    networks:
-      - callmaker-network
+prometheus:
+  image: prom/prometheus:latest
+  container_name: callmaker-prometheus
+  ports:
+    - "9090:9090"
+  volumes:
+    - ./monitoring/prometheus/:/etc/prometheus/
+    - prometheus_data:/prometheus
+  networks:
+    - monitoring
+  restart: unless-stopped
 
 
   grafana:
