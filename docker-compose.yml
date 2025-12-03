@@ -43,7 +43,6 @@ services:
         condition: service_healthy
     networks:
       - callmaker-network
-      - monitoring
     restart: unless-stopped
 
   frontend:
@@ -57,7 +56,6 @@ services:
       - backend
     networks:
       - callmaker-network
-      - monitoring
     restart: unless-stopped
 
 volumes:
@@ -67,6 +65,3 @@ volumes:
 networks:
   callmaker-network:
     driver: bridge
-
-monitoring:
-    external: true
