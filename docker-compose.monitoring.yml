@@ -36,8 +36,8 @@ services:
   mysql-exporter:
     image: prom/mysqld-exporter
     container_name: callmaker-mysql-exporter
-    ports:
-      - "9104:9104"
+    #ports:
+     # - "9104:9104"
     environment:
       DATA_SOURCE_NAME: "callmaker:callmaker_pass@(callmaker-mysql:3306)/callmaker_db"
     networks:
