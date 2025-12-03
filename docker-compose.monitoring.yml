@@ -1,40 +1,30 @@
+version: "3.8"
+
 services:
-  # Prometheus
   prometheus:
     image: prom/prometheus:latest
     container_name: callmaker-prometheus
     ports:
       - "9090:9090"
     volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/prometheus/:/etc/prometheus/
       - prometheus_data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
     networks:
       - monitoring
-    restart: unless-stopped
 
-  # Grafana
   grafana:
     image: grafana/grafana:latest
     container_name: callmaker-grafana
     ports:
       - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
-      - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
     networks:
       - monitoring
-    restart: unless-stopped
     depends_on:
       - prometheus
 
-  # Node Exporter
   node-exporter:
     image: prom/node-exporter:latest
     container_name: callmaker-node-exporter
@@ -42,23 +32,16 @@ services:
       - "9100:9100"
     networks:
       - monitoring
-    restart: unless-stopped
 
-  # MySQL Exporter (mengakses MySQL yang SUDAH RUNNING)
   mysql-exporter:
-    image: prom/mysqld-exporter:latest
+    image: prom/mysqld-exporter
     container_name: callmaker-mysql-exporter
     ports:
       - "9104:9104"
     environment:
-      # Jika MySQL kamu berjalan sebagai container dengan nama "callmaker-mysql"
-      - DATA_SOURCE_NAME=callmaker:callmaker123@(callmaker-mysql:3306)/callmaker_db
-      
-      # Jika MySQL berjalan DI HOST (bukan container), gunakan ini:
-      # - DATA_SOURCE_NAME=callmaker:callmaker123@(host.docker.internal:3306)/callmaker_db
+      DATA_SOURCE_NAME: "callmaker:callmaker_pass@(callmaker-mysql:3306)/callmaker_db"
     networks:
       - monitoring
-    restart: unless-stopped
 
 networks:
   monitoring:
